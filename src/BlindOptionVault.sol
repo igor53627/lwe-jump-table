@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {LWEParameters} from "./utils/LWEParameters.sol";
+
 /**
  * @title BlindOptionVault
  * @notice Encrypted Strategy Execution for an ETH Option Vault.
  * The logic for WHICH option to write is hidden in the LWE ciphertext.
  * 
- * LWE Parameters: n=384, q=4096
+ * LWE Parameters: n=768, q=4096
  */
 contract BlindOptionVault {
-    uint256 constant q = 4096;
-    uint256 constant n = 384;
+    uint256 constant q = LWEParameters.Q;
+    uint256 constant n = LWEParameters.N;
 
     // Simulated Assets
     mapping(address => uint256) public balances; // ETH Balance
@@ -54,14 +56,15 @@ contract BlindOptionVault {
         uint256 _b = entry.b;
         
         // Compute Inner Product <a, s> mod q
-        // Using Yul with 32-step unrolling for balance of gas vs readability.
+        // Using Yul with 32-step unrolling for n=768 (24 iterations of 32)
         assembly {
             let a_ptr := add(mload(entry), 32) 
             let s_base := s.offset // s.offset points to s[0] in calldata
             let inner_prod := 0
             let i := 0
 
-            for {} lt(i, 384) { i := add(i, 32) } {
+            // 768 / 32 = 24 iterations
+            for {} lt(i, 768) { i := add(i, 32) } {
                 // Unroll 32 times
                 inner_prod := add(inner_prod, mul(mload(a_ptr), calldataload(s_base)))
                 inner_prod := add(inner_prod, mul(mload(add(a_ptr, 32)), calldataload(add(s_base, 32))))
@@ -101,15 +104,11 @@ contract BlindOptionVault {
                 s_base := add(s_base, 1024)
             }
             
-            inner_prod := mod(inner_prod, _q)
+            // Bitmask modulo (q is power of 2)
+            inner_prod := and(inner_prod, 0xFFF)
             
-            // Decrypt: m_approx = (b - inner_prod) % q
-            switch lt(_b, inner_prod)
-            case 1 { m_approx := sub(add(_b, _q), inner_prod) }
-            default { m_approx := sub(_b, inner_prod) }
-            
-            // Debugging
-            // log3(0, 0, 0, _b, inner_prod, m_approx) // Too hard to log named event from assembly easily without scratch space
+            // Decrypt: m_approx = (b - inner_prod) & Q_MASK
+            m_approx := and(sub(add(_b, _q), inner_prod), 0xFFF)
         }
         
         emit Debug(_b, 0, m_approx); // Pass 0 for inner_prod as it's local to assembly

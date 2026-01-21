@@ -3,19 +3,19 @@
 ## To Do
 
 ### 1. Security Hardening
-- [ ] **Increase noise distribution** - Replace `[-5,5]` uniform with centered binomial (k=16+) in LWEUtils
-- [ ] **Run lattice estimator** - Document actual security level for (n=768, q=4096, sigma)
-- [ ] **Centralize parameters** - Create `Parameters.sol` with Q, N, PACKED_SIZE, MASK constants
-- [ ] **Fix parameter mismatch** - BlindOptionVault uses n=384 but LWEUtils uses n=768
-- [ ] **Add input validation** - Validate `b < q`, packed word bounds, `strategyId < strategyCount`
-- [ ] **Add access control** - Restrict `addStrategy` to owner/allowlist
+- [x] **Increase noise distribution** - Centered binomial (k=16, sigma~2.83) in LWEUtils
+- [x] **Run lattice estimator** - tools/estimate_lwe.py confirms >128-bit security
+- [x] **Centralize parameters** - Created `LWEParameters.sol` with Q, N, PACKED_SIZE, MASK
+- [x] **Fix parameter mismatch** - BlindOptionVault now uses n=768 from LWEParameters
+- [x] **Add input validation** - Validate `b < q`, `strategyId < strategyCount` (in V2)
+- [x] **Add access control** - Restrict `addStrategy` to owner (in V2)
 
 ### 2. Gas Optimization (Tenderly H2H)
-- [ ] **Bitmask modulo** - Replace `mod 4096` with `& 0xFFF` (q is power of two)
-- [ ] **Internal dispatch** - Replace `this.writeConservativeCall()` with internal functions
-- [ ] **Fixed-size storage** - Use `uint256[37]` instead of dynamic arrays
-- [ ] **Smaller types** - Use `uint16` for `b` since q=4096 fits
-- [ ] **Benchmark on Tenderly** - Compare gas before/after for each optimization
+- [x] **Bitmask modulo** - Replace `mod 4096` with `& 0xFFF` (q is power of two)
+- [x] **Internal dispatch** - Replace `this.writeConservativeCall()` with internal functions
+- [x] **Fixed-size storage** - Use `uint256[37]` instead of dynamic arrays
+- [x] **Smaller types** - Use `uint16` for `b` since q=4096 fits
+- [ ] **Benchmark on Tenderly** - Deploy V1 vs V2 and compare actual on-chain gas
 
 ### 3. Code Quality
 - [ ] **Extract LWE library** - Deduplicate packed/unpacked eval logic
