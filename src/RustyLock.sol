@@ -136,7 +136,8 @@ contract RustyLock {
         require(error <= tolerance, "Solution not close enough");
 
         uint256 prize = address(this).balance;
-        payable(msg.sender).transfer(prize);
         emit Winner(msg.sender, prize, error);
+        (bool success,) = payable(msg.sender).call{value: prize}("");
+        require(success, "Transfer failed");
     }
 }
