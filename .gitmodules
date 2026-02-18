@@ -1,0 +1,3 @@
+[submodule "lib/evm-lwe-math"]
+	path = lib/evm-lwe-math
+	url = https://github.com/igor53627/evm-lwe-math

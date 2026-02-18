@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../src/utils/PackingUtils.sol";
+import {LWEPacking} from "evm-lwe-math/src/LWEPacking.sol";
 import "./utils/LWEUtils.sol";
 
 contract PackingTest is Test {
@@ -19,14 +19,14 @@ contract PackingTest is Test {
         }
 
         // 2. Pack it
-        uint256[] memory packed = PackingUtils.packVector(original);
+        uint256[] memory packed = LWEPacking.packVector12(original);
         
         // Verify size
         // 384 / 21 = 18.28 -> 19 words
         assertEq(packed.length, 19);
 
         // 3. Unpack it (simulating reading from storage and unpacking element by element)
-        uint256[] memory unpacked = PackingUtils.unpackVector(packed, n);
+        uint256[] memory unpacked = LWEPacking.unpackVector12(packed, n);
 
         // 4. Compare
         for(uint256 i=0; i<n; i++) {

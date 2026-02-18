@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import "../src/PackedBlindOptionVault.sol";
 import "../src/PackedBlindOptionVaultV2.sol";
-import "../src/utils/PackingUtils.sol";
+import {LWEPacking} from "evm-lwe-math/src/LWEPacking.sol";
 import "./utils/LWEUtils.sol";
 
 /**
@@ -29,7 +29,7 @@ contract GasComparisonTest is Test {
 
         // Generate Secret 's'
         s_unpacked = LWEUtils.generateSecret(rng);
-        s_packed_dynamic = PackingUtils.packVector(s_unpacked);
+        s_packed_dynamic = LWEPacking.packVector12(s_unpacked);
         
         // Copy to fixed array
         for (uint256 i = 0; i < 37; i++) {
@@ -38,7 +38,7 @@ contract GasComparisonTest is Test {
 
         // Strategy: Conservative (512)
         (uint256[] memory a0, uint256 b0) = LWEUtils.encrypt(s_unpacked, 512, rng);
-        uint256[] memory a0_packed = PackingUtils.packVector(a0);
+        uint256[] memory a0_packed = LWEPacking.packVector12(a0);
         
         // Add to V1
         vaultV1.addStrategy(a0_packed, b0);

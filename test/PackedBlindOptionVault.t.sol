@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../src/PackedBlindOptionVault.sol";
-import "../src/utils/PackingUtils.sol";
+import {LWEPacking} from "evm-lwe-math/src/LWEPacking.sol";
 import "./utils/LWEUtils.sol";
 
 contract PackedBlindOptionVaultTest is Test {
@@ -19,21 +19,21 @@ contract PackedBlindOptionVaultTest is Test {
 
         // 1. Generate Secret 's'
         s_unpacked = LWEUtils.generateSecret(rng);
-        s_packed = PackingUtils.packVector(s_unpacked);
+        s_packed = LWEPacking.packVector12(s_unpacked);
 
         // 2. Generate Strategies (Unpacked first, then pack)
         
         // Strategy 0: Conservative (512)
         (uint256[] memory a0, uint256 b0) = LWEUtils.encrypt(s_unpacked, 512, rng);
-        vault.addStrategy(PackingUtils.packVector(a0), b0);
+        vault.addStrategy(LWEPacking.packVector12(a0), b0);
 
         // Strategy 1: Aggressive (1536)
         (uint256[] memory a1, uint256 b1) = LWEUtils.encrypt(s_unpacked, 1536, rng);
-        vault.addStrategy(PackingUtils.packVector(a1), b1);
+        vault.addStrategy(LWEPacking.packVector12(a1), b1);
         
         // Strategy 2: Hedge (2560)
         (uint256[] memory a2, uint256 b2) = LWEUtils.encrypt(s_unpacked, 2560, rng);
-        vault.addStrategy(PackingUtils.packVector(a2), b2);
+        vault.addStrategy(LWEPacking.packVector12(a2), b2);
     }
 
     function test_Packed_EndToEnd_StrategyExecution() public {
