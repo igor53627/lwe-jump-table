@@ -7,18 +7,19 @@ pragma solidity ^0.8.0;
  * The noise tolerance increases as more ETH is deposited.
  * The first to find a vector 's' that satisfies the relaxed LWE equation wins the pot.
  * Solutions require a two-phase commit-reveal to prevent frontrunning.
+ *
+ * Uses packed 12-bit storage (21 elements per uint256, 37 words for n=768)
+ * with SWAR inner product for gas efficiency.
  */
 contract RustyLock {
     uint256 constant Q = 4096;
     uint256 constant Q_MASK = 0xFFF;
     uint256 constant N = 768;
+    uint256 constant PACKED_SIZE = 37; // ceil(768/21)
     uint256 public constant COMMIT_DELAY = 2;
 
-    struct LWEEntry {
-        uint256[] a;
-        uint256 b;
-    }
-    LWEEntry public puzzle;
+    uint256[37] public puzzleA;
+    uint16 public puzzleB;
 
     uint256 public immutable baseTolerance;
     uint256 public immutable toleranceMultiplier;
@@ -36,17 +37,23 @@ contract RustyLock {
     event Committed(address solver, bytes32 commitHash, uint256 blockNumber);
     event Winner(address winner, uint256 prize, uint256 error);
 
+    error InvalidDimension();
+    error InvalidB();
+
     constructor(
-        uint256[] memory _a,
-        uint256 _b,
+        uint256[37] memory _aPacked,
+        uint16 _b,
         uint256 _baseTolerance,
         uint256 _toleranceMultiplier,
         uint256 _maxTolerance
     ) payable {
-        require(_a.length == N, "Invalid dimension");
+        if (_b >= Q) revert InvalidB();
         require(_maxTolerance > _baseTolerance, "Max must exceed base");
         require(_maxTolerance <= Q / 2, "Max tolerance must be <= q/2");
-        puzzle = LWEEntry(_a, _b);
+        for (uint256 i = 0; i < PACKED_SIZE; i++) {
+            puzzleA[i] = _aPacked[i];
+        }
+        puzzleB = _b;
         baseTolerance = _baseTolerance;
         toleranceMultiplier = _toleranceMultiplier;
         maxTolerance = _maxTolerance;
@@ -70,68 +77,124 @@ contract RustyLock {
         emit Committed(msg.sender, commitHash, block.number);
     }
 
-    /// @notice Phase 2: reveal and verify solution.
-    function solve(uint256[] calldata s) external {
+    /// @notice Phase 2: reveal and verify packed solution.
+    function solve(uint256[37] calldata sPacked) external {
         require(!solved, "Already solved");
-        require(s.length == N, "Invalid dimension");
 
         Commitment memory c = _commits[msg.sender];
         require(c.blockNumber > 0, "No commit found");
         require(block.number >= c.blockNumber + COMMIT_DELAY, "Reveal too early");
-        require(keccak256(abi.encode(msg.sender, s)) == c.hash, "Invalid reveal");
+        require(keccak256(abi.encode(msg.sender, sPacked)) == c.hash, "Invalid reveal");
 
-        uint256 _q = Q;
-        uint256 _b = puzzle.b;
+        uint256 _b = puzzleB;
         uint256 inner_prod = 0;
 
-        uint256[] memory a_mem = puzzle.a;
-
+        // Packed SWAR inner product: 37 words × 21 elements/word
+        // Reads puzzleA from storage, sPacked from calldata
         assembly {
-            let a_ptr := add(a_mem, 32)
-            let s_base := s.offset
-            let i := 0
+            let mask := 0xFFF
 
-            for {} lt(i, 768) { i := add(i, 32) } {
-                inner_prod := add(inner_prod, mul(mload(a_ptr), calldataload(s_base)))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 32)), calldataload(add(s_base, 32))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 64)), calldataload(add(s_base, 64))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 96)), calldataload(add(s_base, 96))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 128)), calldataload(add(s_base, 128))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 160)), calldataload(add(s_base, 160))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 192)), calldataload(add(s_base, 192))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 224)), calldataload(add(s_base, 224))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 256)), calldataload(add(s_base, 256))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 288)), calldataload(add(s_base, 288))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 320)), calldataload(add(s_base, 320))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 352)), calldataload(add(s_base, 352))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 384)), calldataload(add(s_base, 384))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 416)), calldataload(add(s_base, 416))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 448)), calldataload(add(s_base, 448))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 480)), calldataload(add(s_base, 480))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 512)), calldataload(add(s_base, 512))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 544)), calldataload(add(s_base, 544))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 576)), calldataload(add(s_base, 576))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 608)), calldataload(add(s_base, 608))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 640)), calldataload(add(s_base, 640))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 672)), calldataload(add(s_base, 672))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 704)), calldataload(add(s_base, 704))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 736)), calldataload(add(s_base, 736))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 768)), calldataload(add(s_base, 768))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 800)), calldataload(add(s_base, 800))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 832)), calldataload(add(s_base, 832))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 864)), calldataload(add(s_base, 864))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 896)), calldataload(add(s_base, 896))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 928)), calldataload(add(s_base, 928))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 960)), calldataload(add(s_base, 960))))
-                inner_prod := add(inner_prod, mul(mload(add(a_ptr, 992)), calldataload(add(s_base, 992))))
+            // Compute storage slot for puzzleA[0]
+            // puzzleA is at slot 0 (first state variable after constants)
+            let baseSlot := puzzleA.slot
 
-                a_ptr := add(a_ptr, 1024)
-                s_base := add(s_base, 1024)
+            // sPacked calldata offset
+            let s_ptr := sPacked
+
+            for { let i := 0 } lt(i, 37) { i := add(i, 1) } {
+                let w_a := sload(add(baseSlot, i))
+                let w_s := calldataload(s_ptr)
+
+                // Unroll 21 elements (SWAR unpacking)
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+                w_a := shr(12, w_a)
+                w_s := shr(12, w_s)
+
+                inner_prod := add(inner_prod, mul(and(w_a, mask), and(w_s, mask)))
+
+                s_ptr := add(s_ptr, 32)
             }
 
             inner_prod := and(inner_prod, 0xFFF)
         }
 
+        uint256 _q = Q;
         uint256 error;
         if (inner_prod > _b) {
             uint256 diff = inner_prod - _b;
