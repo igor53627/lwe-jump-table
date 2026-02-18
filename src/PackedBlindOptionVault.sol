@@ -27,8 +27,6 @@ contract PackedBlindOptionVault {
 
     event OptionMinted(string strategyName, uint256 strikePrice);
     event StrategyExecuted(uint256 strategyId, string action);
-    event Debug(uint256 b, uint256 inner, uint256 m_approx);
-
     constructor() {
         balances[address(this)] = 100 ether;
     }
@@ -183,23 +181,19 @@ contract PackedBlindOptionVault {
             default { m_approx := sub(_b, inner_prod) }
         }
         
-        emit Debug(_b, inner_prod, m_approx);
-
-        // Dispatch Logic
         if (m_approx < (q / 4)) {
-            this.writeConservativeCall();
+            _writeConservativeCall();
         } else if (m_approx < (2 * q / 4)) {
-            this.writeAggressiveCall();
+            _writeAggressiveCall();
         } else if (m_approx < (3 * q / 4)) {
-            this.writePutHedge();
+            _writePutHedge();
         } else {
-            this.holdPosition();
+            _holdPosition();
         }
     }
 
-    // --- Hidden Strategies ---
-    function writeConservativeCall() external { emit OptionMinted("Conservative Call", 3000); emit StrategyExecuted(0, "Conservative"); }
-    function writeAggressiveCall() external { emit OptionMinted("Aggressive Call", 2600); emit StrategyExecuted(0, "Aggressive"); }
-    function writePutHedge() external { emit OptionMinted("Put Hedge", 2400); emit StrategyExecuted(0, "Hedge"); }
-    function holdPosition() external { emit StrategyExecuted(0, "Hold"); }
+    function _writeConservativeCall() internal { emit OptionMinted("Conservative Call", 3000); emit StrategyExecuted(0, "Conservative"); }
+    function _writeAggressiveCall() internal { emit OptionMinted("Aggressive Call", 2600); emit StrategyExecuted(0, "Aggressive"); }
+    function _writePutHedge() internal { emit OptionMinted("Put Hedge", 2400); emit StrategyExecuted(0, "Hedge"); }
+    function _holdPosition() internal { emit StrategyExecuted(0, "Hold"); }
 }
