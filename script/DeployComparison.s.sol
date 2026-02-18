@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Script.sol";
 import "../src/PackedBlindOptionVault.sol";
 import "../src/PackedBlindOptionVaultV2.sol";
-import "../src/utils/PackingUtils.sol";
+import {LWEPacking} from "evm-lwe-math/src/LWEPacking.sol";
 import "../test/utils/LWEUtils.sol";
 
 /**
@@ -29,11 +29,11 @@ contract DeployComparison is Script {
         // Generate test data
         LWEUtils.RNG memory rng = LWEUtils.initRNG(12345);
         uint256[] memory s_unpacked = LWEUtils.generateSecret(rng);
-        uint256[] memory s_packed_dyn = PackingUtils.packVector(s_unpacked);
+        uint256[] memory s_packed_dyn = LWEPacking.packVector12(s_unpacked);
 
         // Encrypt message for sector 0 (Conservative)
         (uint256[] memory a0, uint256 b0) = LWEUtils.encrypt(s_unpacked, 512, rng);
-        uint256[] memory a0_packed = PackingUtils.packVector(a0);
+        uint256[] memory a0_packed = LWEPacking.packVector12(a0);
 
         // Add strategy to V1
         vaultV1.addStrategy(a0_packed, b0);
