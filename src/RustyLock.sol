@@ -49,7 +49,7 @@ contract RustyLock {
     ) payable {
         if (_b >= Q) revert InvalidB();
         require(_maxTolerance > _baseTolerance, "Max must exceed base");
-        require(_maxTolerance <= Q / 2, "Max tolerance must be <= q/2");
+        require(_maxTolerance < Q / 4, "Max tolerance must be < q/4");
         for (uint256 i = 0; i < PACKED_SIZE; i++) {
             puzzleA[i] = _aPacked[i];
         }

@@ -28,7 +28,7 @@ contract RustyLockTest is Test {
         }
 
         // baseTolerance=10, multiplier=1, maxTolerance=1024
-        game = new RustyLock(aFixed, uint16(b), 10, 1, 1024);
+        game = new RustyLock(aFixed, uint16(b), 10, 1, 512);
     }
 
     function test_WinGame() public {
@@ -75,7 +75,7 @@ contract RustyLockTest is Test {
 
     function test_ToleranceCap() public {
         game.contribute{value: 2000 ether}();
-        assertEq(game.getTolerance(), 1024);
+        assertEq(game.getTolerance(), 512);
     }
 
     function test_RevertAfterSolved() public {
