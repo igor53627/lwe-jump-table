@@ -24,8 +24,10 @@ contract RustyLock {
     uint256 public immutable baseTolerance;
     uint256 public immutable toleranceMultiplier;
     uint256 public immutable maxTolerance;
+    uint256 public immutable expiry;
 
     bool public solved;
+    mapping(address => uint256) public deposits;
 
     struct Commitment {
         bytes32 hash;
@@ -36,6 +38,7 @@ contract RustyLock {
     event PotIncreased(address contributor, uint256 amount, uint256 newTolerance);
     event Committed(address solver, bytes32 commitHash, uint256 blockNumber);
     event Winner(address winner, uint256 prize, uint256 error);
+    event Withdrawn(address depositor, uint256 amount);
 
     error InvalidDimension();
     error InvalidB();
@@ -45,11 +48,13 @@ contract RustyLock {
         uint16 _b,
         uint256 _baseTolerance,
         uint256 _toleranceMultiplier,
-        uint256 _maxTolerance
+        uint256 _maxTolerance,
+        uint256 _duration
     ) payable {
         if (_b >= Q) revert InvalidB();
         require(_maxTolerance > _baseTolerance, "Max must exceed base");
         require(_maxTolerance < Q / 4, "Max tolerance must be < q/4");
+        require(_duration > 0, "Duration must be > 0");
         for (uint256 i = 0; i < PACKED_SIZE; i++) {
             puzzleA[i] = _aPacked[i];
         }
@@ -57,12 +62,27 @@ contract RustyLock {
         baseTolerance = _baseTolerance;
         toleranceMultiplier = _toleranceMultiplier;
         maxTolerance = _maxTolerance;
+        expiry = block.timestamp + _duration;
     }
 
     function contribute() external payable {
         require(!solved, "Already solved");
+        require(block.timestamp < expiry, "Game expired");
         require(msg.value > 0, "Must contribute ETH");
+        deposits[msg.sender] += msg.value;
         emit PotIncreased(msg.sender, msg.value, getTolerance());
+    }
+
+    /// @notice Withdraw deposit after game expires unsolved.
+    function withdraw() external {
+        require(block.timestamp >= expiry, "Game not expired");
+        require(!solved, "Game was solved");
+        uint256 amount = deposits[msg.sender];
+        require(amount > 0, "No deposit");
+        deposits[msg.sender] = 0;
+        emit Withdrawn(msg.sender, amount);
+        (bool success,) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
     }
 
     function getTolerance() public view returns (uint256) {
@@ -73,6 +93,7 @@ contract RustyLock {
     /// @notice Phase 1: commit hash of your solution.
     function commit(bytes32 commitHash) external {
         require(!solved, "Already solved");
+        require(block.timestamp < expiry, "Game expired");
         _commits[msg.sender] = Commitment({hash: commitHash, blockNumber: block.number});
         emit Committed(msg.sender, commitHash, block.number);
     }
@@ -80,6 +101,7 @@ contract RustyLock {
     /// @notice Phase 2: reveal and verify packed solution.
     function solve(uint256[37] calldata sPacked) external {
         require(!solved, "Already solved");
+        require(block.timestamp < expiry, "Game expired");
 
         Commitment memory c = _commits[msg.sender];
         require(c.blockNumber > 0, "No commit found");

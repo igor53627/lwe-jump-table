@@ -1,9 +1,11 @@
 ---
 id: TASK-8
 title: Add timeout and withdrawal mechanism to RustyLock
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-02-18 20:03'
+updated_date: '2026-02-18 20:32'
 labels:
   - contracts
 dependencies: []
@@ -18,9 +20,15 @@ RustyLock has no game timeout — if nobody solves the puzzle, ETH is locked for
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Add game expiry timestamp (constructor parameter)
-- [ ] #2 Add withdraw function for depositors after expiry
-- [ ] #3 Block new deposits after expiry
-- [ ] #4 Block solve attempts after expiry
-- [ ] #5 Tests for timeout lifecycle
+- [x] #1 Add game expiry timestamp (constructor parameter)
+- [x] #2 Add withdraw function for depositors after expiry
+- [x] #3 Block new deposits after expiry
+- [x] #4 Block solve attempts after expiry
+- [x] #5 Tests for timeout lifecycle
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added game expiry with per-depositor withdrawal. Deposits tracked in mapping, withdrawable after expiry if unsolved. Contribute/commit/solve blocked after expiry.
+<!-- SECTION:FINAL_SUMMARY:END -->
