@@ -89,8 +89,10 @@ contract RustyLock {
         uint256 _b = puzzleB;
         uint256 inner_prod = 0;
 
-        // Packed SWAR inner product: 37 words × 21 elements/word
-        // Reads puzzleA from storage, sPacked from calldata
+        // Packed SWAR inner product: 37 words × 21 elements/word = 777 lanes
+        // N=768, so last word has 9 trailing zero-padded lanes (768 mod 21 = 12 used).
+        // Trailing zeros contribute 0 to inner product, so no masking needed
+        // as long as both a and s are packed by the same LWEPacking.packVector12.
         assembly {
             let mask := 0xFFF
 

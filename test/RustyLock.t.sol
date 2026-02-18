@@ -27,7 +27,7 @@ contract RustyLockTest is Test {
             s_packed[i] = sPacked[i];
         }
 
-        // baseTolerance=10, multiplier=1, maxTolerance=1024
+        // baseTolerance=10, multiplier=1, maxTolerance=512
         game = new RustyLock(aFixed, uint16(b), 10, 1, 512);
     }
 
@@ -98,6 +98,32 @@ contract RustyLockTest is Test {
 
         vm.expectRevert("Already solved");
         game.contribute{value: 1 ether}();
+    }
+
+    function test_ConstructorRevertMaxToleranceAtBoundary() public {
+        LWEUtils.RNG memory rng = LWEUtils.initRNG(9999);
+        uint256[] memory s_secret = LWEUtils.generateSecret(rng);
+        (uint256[] memory a, uint256 b) = LWEUtils.encrypt(s_secret, 0, rng);
+        uint256[] memory aPacked = LWEPacking.packVector12(a);
+        uint256[37] memory aFixed;
+        for (uint256 i = 0; i < 37; i++) aFixed[i] = aPacked[i];
+
+        // q/4 = 1024 should revert (< q/4 required)
+        vm.expectRevert("Max tolerance must be < q/4");
+        new RustyLock(aFixed, uint16(b), 10, 1, 1024);
+    }
+
+    function test_ConstructorSucceedsAtMaxBoundary() public {
+        LWEUtils.RNG memory rng = LWEUtils.initRNG(9999);
+        uint256[] memory s_secret = LWEUtils.generateSecret(rng);
+        (uint256[] memory a, uint256 b) = LWEUtils.encrypt(s_secret, 0, rng);
+        uint256[] memory aPacked = LWEPacking.packVector12(a);
+        uint256[37] memory aFixed;
+        for (uint256 i = 0; i < 37; i++) aFixed[i] = aPacked[i];
+
+        // 1023 should succeed
+        RustyLock g = new RustyLock(aFixed, uint16(b), 10, 1, 1023);
+        assertEq(g.maxTolerance(), 1023);
     }
 
     receive() external payable {}
