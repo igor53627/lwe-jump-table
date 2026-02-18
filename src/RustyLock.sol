@@ -63,6 +63,9 @@ contract RustyLock {
         toleranceMultiplier = _toleranceMultiplier;
         maxTolerance = _maxTolerance;
         expiry = block.timestamp + _duration;
+        if (msg.value > 0) {
+            deposits[msg.sender] += msg.value;
+        }
     }
 
     function contribute() external payable {

@@ -267,5 +267,18 @@ contract RustyLockTest is Test {
         recipient.reveal(s_packed);
     }
 
+    function test_ConstructorFundedWithdrawAfterExpiry() public {
+        // Deploy with initial ETH
+        RustyLock g = new RustyLock{value: 5 ether}(aFixed, bVal, 10, 1, 512, 1 days);
+        assertEq(g.deposits(address(this)), 5 ether);
+
+        vm.warp(block.timestamp + 1 days + 1);
+
+        uint256 pre = address(this).balance;
+        g.withdraw();
+        uint256 post = address(this).balance;
+        assertEq(post - pre, 5 ether);
+    }
+
     receive() external payable {}
 }
