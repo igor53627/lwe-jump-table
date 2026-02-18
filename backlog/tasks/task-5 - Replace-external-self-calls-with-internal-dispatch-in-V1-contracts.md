@@ -1,9 +1,11 @@
 ---
 id: TASK-5
 title: Replace external self-calls with internal dispatch in V1 contracts
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-02-18 20:03'
+updated_date: '2026-02-18 20:16'
 labels:
   - gas
   - contracts
@@ -19,7 +21,13 @@ BlindOptionVault.sol and PackedBlindOptionVault.sol use external self-calls (thi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Refactor BlindOptionVault.sol dispatch to internal functions
-- [ ] #2 Refactor PackedBlindOptionVault.sol dispatch to internal functions
-- [ ] #3 All tests pass with no gas regressions
+- [x] #1 Refactor BlindOptionVault.sol dispatch to internal functions
+- [x] #2 Refactor PackedBlindOptionVault.sol dispatch to internal functions
+- [x] #3 All tests pass with no gas regressions
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Converted external self-calls to internal dispatch. Gas savings: V1 -2376, PackedV1 -7127.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,9 +1,11 @@
 ---
 id: TASK-1
 title: Replace deprecated transfer() with safe call pattern in RustyLock
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-02-18 20:02'
+updated_date: '2026-02-18 20:15'
 labels:
   - security
   - contracts
@@ -19,6 +21,12 @@ RustyLock.sol line 139 uses payable(msg.sender).transfer(prize) which has a fixe
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Replace transfer() with (bool success,) = payable(msg.sender).call{value: prize}("") plus require
-- [ ] #2 Verify RustyLock tests still pass
+- [x] #1 Replace transfer() with (bool success,) = payable(msg.sender).call{value: prize}("") plus require
+- [x] #2 Verify RustyLock tests still pass
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Replaced deprecated transfer() with .call{} pattern. Emit moved before external call (CEI pattern).
+<!-- SECTION:FINAL_SUMMARY:END -->

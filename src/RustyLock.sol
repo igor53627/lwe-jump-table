@@ -3,84 +3,95 @@ pragma solidity ^0.8.0;
 
 /**
  * @title RustyLock
- * @notice A Progressive Lattice Puzzle.
+ * @notice A Progressive Lattice Puzzle with commit-reveal MEV protection.
  * The noise tolerance increases as more ETH is deposited.
  * The first to find a vector 's' that satisfies the relaxed LWE equation wins the pot.
+ * Solutions require a two-phase commit-reveal to prevent frontrunning.
  */
 contract RustyLock {
-    uint256 constant q = 4096;
-    uint256 constant n = 768;
-    
-    // The Puzzle: LWE sample (a, b)
-    // b = <a, s_secret> + e
+    uint256 constant Q = 4096;
+    uint256 constant Q_MASK = 0xFFF;
+    uint256 constant N = 768;
+    uint256 public constant COMMIT_DELAY = 2;
+
     struct LWEEntry {
         uint256[] a;
         uint256 b;
     }
     LWEEntry public puzzle;
-    
-    // Game State
-    uint256 public baseTolerance = 10; // Initial allowed error (very strict)
-    uint256 public toleranceMultiplier = 1; // Tolerance gained per ETH deposited
-    
+
+    uint256 public immutable baseTolerance;
+    uint256 public immutable toleranceMultiplier;
+    uint256 public immutable maxTolerance;
+
+    bool public solved;
+
+    struct Commitment {
+        bytes32 hash;
+        uint256 blockNumber;
+    }
+    mapping(address => Commitment) private _commits;
+
     event PotIncreased(address contributor, uint256 amount, uint256 newTolerance);
+    event Committed(address solver, bytes32 commitHash, uint256 blockNumber);
     event Winner(address winner, uint256 prize, uint256 error);
 
-    constructor(uint256[] memory _a, uint256 _b) payable {
-        require(_a.length == n, "Invalid dimension");
+    constructor(
+        uint256[] memory _a,
+        uint256 _b,
+        uint256 _baseTolerance,
+        uint256 _toleranceMultiplier,
+        uint256 _maxTolerance
+    ) payable {
+        require(_a.length == N, "Invalid dimension");
+        require(_maxTolerance > _baseTolerance, "Max must exceed base");
+        require(_maxTolerance <= Q / 2, "Max tolerance must be <= q/2");
         puzzle = LWEEntry(_a, _b);
+        baseTolerance = _baseTolerance;
+        toleranceMultiplier = _toleranceMultiplier;
+        maxTolerance = _maxTolerance;
     }
 
-    /**
-     * @notice Deposit ETH to increase the pot and weaken the lock.
-     * Each 1 ETH deposited adds 'toleranceMultiplier' to the allowed error.
-     */
     function contribute() external payable {
+        require(!solved, "Already solved");
         require(msg.value > 0, "Must contribute ETH");
         emit PotIncreased(msg.sender, msg.value, getTolerance());
     }
 
-    /**
-     * @notice The current error tolerance allowed.
-     * Starts at baseTolerance and increases with the balance.
-     */
     function getTolerance() public view returns (uint256) {
-        // Linear scaling: 1 ETH = +1 unit of tolerance (roughly)
-        // Adjust multiplier based on 'q'. 
-        // q=4096. Max tolerance possible is ~2048.
-        // If we want the game to last until ~100 ETH, multiplier should be ~20.
-        uint256 balanceTolerance = (address(this).balance * toleranceMultiplier) / 1 ether;
-        return baseTolerance + balanceTolerance;
+        uint256 raw = baseTolerance + (address(this).balance * toleranceMultiplier) / 1 ether;
+        return raw < maxTolerance ? raw : maxTolerance;
     }
 
-    /**
-     * @notice Submit a solution 's'.
-     * If | b - <a, s> | < currentTolerance, you win the entire balance.
-     */
+    /// @notice Phase 1: commit hash of your solution.
+    function commit(bytes32 commitHash) external {
+        require(!solved, "Already solved");
+        _commits[msg.sender] = Commitment({hash: commitHash, blockNumber: block.number});
+        emit Committed(msg.sender, commitHash, block.number);
+    }
+
+    /// @notice Phase 2: reveal and verify solution.
     function solve(uint256[] calldata s) external {
-        require(s.length == n, "Invalid dimension");
-        
-        uint256 _q = q;
+        require(!solved, "Already solved");
+        require(s.length == N, "Invalid dimension");
+
+        Commitment memory c = _commits[msg.sender];
+        require(c.blockNumber > 0, "No commit found");
+        require(block.number >= c.blockNumber + COMMIT_DELAY, "Reveal too early");
+        require(keccak256(abi.encode(msg.sender, s)) == c.hash, "Invalid reveal");
+
+        uint256 _q = Q;
         uint256 _b = puzzle.b;
         uint256 inner_prod = 0;
-        
-        // Optimized Inner Product <a, s>
-        // Loading 'a' from storage is expensive (SLOADs). 
-        // For a high-stakes game, gas cost (~20M) is acceptable for the winner.
-        // To optimize, we could store 'a' in code or use IPFS hash (but then on-chain verifiction is hard).
-        // Here we just accept the SLOAD cost for the prototype.
-        
-        // Actually, we can't do SLOAD easily in a loop in pure Yul without manual storage slot math.
-        // Let's use Solidity loop for simplicity here, or simple unrolled Solidity.
-        
-        uint256[] memory a_mem = puzzle.a; // Copy to memory (Expensive but clean)
-        
+
+        uint256[] memory a_mem = puzzle.a;
+
         assembly {
-             let a_ptr := add(a_mem, 32)
-             let s_base := s.offset
-             let i := 0
-             
-             for {} lt(i, 768) { i := add(i, 32) } {
+            let a_ptr := add(a_mem, 32)
+            let s_base := s.offset
+            let i := 0
+
+            for {} lt(i, 768) { i := add(i, 32) } {
                 inner_prod := add(inner_prod, mul(mload(a_ptr), calldataload(s_base)))
                 inner_prod := add(inner_prod, mul(mload(add(a_ptr, 32)), calldataload(add(s_base, 32))))
                 inner_prod := add(inner_prod, mul(mload(add(a_ptr, 64)), calldataload(add(s_base, 64))))
@@ -116,25 +127,25 @@ contract RustyLock {
 
                 a_ptr := add(a_ptr, 1024)
                 s_base := add(s_base, 1024)
-             }
-             
-             inner_prod := mod(inner_prod, _q)
+            }
+
+            inner_prod := and(inner_prod, 0xFFF)
         }
 
         uint256 error;
         if (inner_prod > _b) {
-            // Distance is min(|b-ip|, |b-ip+q|) ? No, standard modular distance.
-            // d(x, y) = min(|x-y|, q - |x-y|)
             uint256 diff = inner_prod - _b;
-            if (diff > _q / 2) { error = _q - diff; } else { error = diff; }
+            error = diff > _q / 2 ? _q - diff : diff;
         } else {
             uint256 diff = _b - inner_prod;
-            if (diff > _q / 2) { error = _q - diff; } else { error = diff; }
+            error = diff > _q / 2 ? _q - diff : diff;
         }
 
         uint256 tolerance = getTolerance();
         require(error <= tolerance, "Solution not close enough");
 
+        solved = true;
+        delete _commits[msg.sender];
         uint256 prize = address(this).balance;
         emit Winner(msg.sender, prize, error);
         (bool success,) = payable(msg.sender).call{value: prize}("");
